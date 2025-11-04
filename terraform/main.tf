@@ -1,11 +1,43 @@
-provider "aws" {
-  region = "us-east-1c" # or your preferred regions
+###########################################
+# Terraform & Provider Configuration
+###########################################
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
 }
 
-# Security group for HTTP + SSH access
+provider "aws" {
+  region = "us-east-1"   # ✅ use same region as your keypair
+}
+
+###########################################
+# Generate Unique Suffix for Resource Names
+###########################################
+resource "random_id" "suffix" {
+  byte_length = 3
+}
+
+###########################################
+# Use Existing SSH Key
+###########################################
+data "aws_key_pair" "web_key" {
+  key_name = "hello-world"
+}
+
+###########################################
+# Security Group (with unique name)
+###########################################
 resource "aws_security_group" "web_sg" {
-  name        = "web_sg"
-  description = "Allow HTTP and SSH"
+  name        = "web_sg-${random_id.suffix.hex}"
+  description = "Allow SSH (22) and HTTP (80)"
 
   ingress {
     description = "SSH"
@@ -29,29 +61,30 @@ resource "aws_security_group" "web_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-# EC2 Instance
-resource "aws_instance" "web" {
-  ami           = "ami-0360c520857e3138f"  # Ubuntu 22.04 (eu-west-1)
-  instance_type = "t3.micro"
-  key_name      = "Aj website"                 # use your AWS key pair name
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              apt update -y
-              apt install -y docker.io
-              systemctl enable docker
-              systemctl start docker
-              EOF
 
   tags = {
-    Name = "aj-static-web"
+    Name = "web_sg-${random_id.suffix.hex}"
   }
 }
 
-# Output the EC2 public IP
+###########################################
+# EC2 Instance
+###########################################
+resource "aws_instance" "web" {
+  ami                    = "ami-0c02fb55956c7d316" # Ubuntu 22.04 (eu-north-1)
+  instance_type          = "t3.micro"
+  key_name               = data.aws_key_pair.web_key.key_name
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "MyStaticPage"
+  }
+}
+
+###########################################
+# Output EC2 Public IP for Ansible
+###########################################
 output "public_ip" {
-  value = aws_instance.web.public_ip
+  description = "Public IP of the EC2 instance"
+  value       = aws_instance.web.public_ip
 }
