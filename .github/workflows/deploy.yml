@@ -25,7 +25,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 🧩 Step 3 — Setup Terraform
+      # 🧩 Step 3 — Set up Terraform
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -36,56 +36,42 @@ jobs:
         working-directory: terraform
         run: terraform init -input=false
 
-      # 🧩 Step 5 — Terraform Apply
-      - name: Terraform Apply
-        working-directory: terraform
-        run: terraform apply -auto-approve -input=false
-
-      # 🧩 Step 6 — Capture Terraform Output
-      - name: Capture Terraform output
+      # 🧩 Step 5 — Terraform Apply + Capture Outputs (Combined for stability)
+      - name: Terraform Apply and Capture Output
         id: tf-output
         working-directory: terraform
         run: |
-          echo "Fetching Terraform outputs..."
-          terraform output -json > tf_output.json 2> tf_output_error.log || true
+          echo "🚀 Running Terraform Apply..."
+          terraform apply -auto-approve -input=false
 
-          if ! jq empty tf_output.json 2>/dev/null; then
-            echo "⚠️ Terraform output is not valid JSON. Creating fallback."
-            echo "{}" > tf_output.json
-          fi
-
+          echo "📦 Capturing Terraform outputs..."
+          terraform output -json > tf_output.json
           echo "✅ Terraform outputs (raw):"
-          cat tf_output.json || echo "{}"
+          cat tf_output.json
 
-      # 🧩 Step 7 — Extract Public IP for Ansible
-      - name: Extract EC2 Public IP
-        id: extract-ip
-        working-directory: terraform
-        run: |
           PUBLIC_IP=$(jq -r '.public_ip.value // empty' tf_output.json)
           if [ -z "$PUBLIC_IP" ]; then
-            echo "❌ Could not extract public_ip from Terraform output."
-            echo "🔍 Terraform outputs were:"
-            cat tf_output.json
+            echo "❌ No public_ip found in Terraform output."
             exit 1
           fi
+
           echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
           echo "✅ Deployed EC2 IP: $PUBLIC_IP"
 
-      # 🧩 Step 8 — Install Ansible & jq
+      # 🧩 Step 6 — Install Ansible
       - name: Install Ansible
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ansible jq
 
-      # 🧩 Step 9 — Create SSH key for Ansible connection
-      - name: Create SSH private key
+      # 🧩 Step 7 — Create SSH Private Key for EC2
+      - name: Create SSH Private Key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/hello-world
           chmod 600 ~/.ssh/hello-world
 
-      # 🧩 Step 10 — Run Ansible Playbook
+      # 🧩 Step 8 — Run Ansible Playbook
       - name: Run Ansible Playbook
         working-directory: ansible
         run: |
