@@ -1,6 +1,6 @@
 ---
-- name: Setup EC2 and run Docker container
-  hosts: web
+- name: Deploy static website using Docker
+  hosts: all
   become: yes
 
   tasks:
@@ -13,29 +13,30 @@
         name: docker.io
         state: present
 
-    - name: Stop existing container
-      shell: docker stop my-static-page || true
+    - name: Enable and start Docker
+      systemd:
+        name: docker
+        enabled: true
+        state: started
 
-    - name: Remove old container
-      shell: docker rm my-static-page || true
+    - name: Create website directory
+      file:
+        path: /opt/website
+        state: directory
+        owner: ubuntu
+        mode: "0755"
 
-    - name: Remove old image
-      shell: docker rmi my-static-page || true
-
-    - name: Copy website files
-      synchronize:
-        src: ../src/
-        dest: /home/ubuntu/src/
-        recursive: yes
-
-    - name: Copy Dockerfile
+    - name: Copy website files from src/
       copy:
-        src: ../docker/Dockerfile
-        dest: /home/ubuntu/Dockerfile
+        src: ../src/
+        dest: /opt/website/
+        owner: ubuntu
+        mode: "0644"
 
-    - name: Build Docker image
-      shell: docker build -t my-static-page /home/ubuntu/
+    - name: Remove old container if exists
+      shell: docker rm -f my-static-page || true
 
-    - name: Run Docker container
-      shell: docker run -d -p 80:80 --name my-static-page my-static-page
-
+    - name: Run Nginx container serving the site
+      shell: >
+        docker run -d --name my-static-page -p 80:80
+        -v /opt/website:/usr/share/nginx/html:ro nginx

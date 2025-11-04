@@ -1,17 +1,17 @@
 provider "aws" {
-  region = "us-east-1"
+  region = "eu-north-1"
 }
 
-resource "aws_key_pair" "web_key" {
-  key_name   = "web_key"
-  public_key = file("~/.ssh/id_rsa.pub")
+data "aws_key_pair" "web_key" {
+  key_name = "hello-world"
 }
 
 resource "aws_security_group" "web_sg" {
   name        = "web_sg"
-  description = "Allow HTTP and SSH"
+  description = "Allow SSH (22) and HTTP (80)"
 
   ingress {
+    description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -19,6 +19,7 @@ resource "aws_security_group" "web_sg" {
   }
 
   ingress {
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -31,12 +32,16 @@ resource "aws_security_group" "web_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "web_sg"
+  }
 }
 
 resource "aws_instance" "web" {
-  ami                    = "ami-0c02fb55956c7d316"  # Ubuntu 22.04 LTS
-  instance_type          = "t2.micro"
-  key_name               = aws_key_pair.web_key.key_name
+  ami                    = "ami-0f3e4c7d7d6f5a1c4" # Ubuntu 22.04 (eu-north-1)
+  instance_type          = "t3.micro"
+  key_name               = data.aws_key_pair.web_key.key_name
   vpc_security_group_ids = [aws_security_group.web_sg.id]
 
   tags = {
@@ -45,5 +50,6 @@ resource "aws_instance" "web" {
 }
 
 output "public_ip" {
-  value = aws_instance.web.public_ip
+  description = "EC2 public IP"
+  value       = aws_instance.web.public_ip
 }

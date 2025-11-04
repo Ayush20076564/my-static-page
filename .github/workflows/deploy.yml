@@ -1,51 +1,70 @@
-name: CI/CD Static Website
+name: Deploy static website to EC2
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: eu-north-1
+      ANSIBLE_HOST_KEY_CHECKING: "False"
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.7.5
-
-      - name: Configure AWS Credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init & Apply
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve -input=false
+
+      - name: Capture Terraform output
+        id: tf-output
         working-directory: terraform
         run: |
-          terraform init
-          terraform apply -auto-approve
+          terraform output -json > tf_output.json
+          cat tf_output.json
 
-      - name: Get EC2 Public IP
-        id: ip
+      - name: Extract EC2 Public IP
+        id: extract-ip
         working-directory: terraform
         run: |
-          echo "EC2_IP=$(terraform output -raw public_ip)" >> $GITHUB_ENV
+          PUBLIC_IP=$(jq -r '.public_ip.value' tf_output.json)
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+          echo "Deployed EC2 IP: $PUBLIC_IP"
 
       - name: Install Ansible
-        run: sudo apt update && sudo apt install -y ansible
-
-      - name: Create dynamic inventory
         run: |
-          echo "[web]" > ansible/inventory.ini
-          echo "${{ env.EC2_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=private_key.pem" >> ansible/inventory.ini
+          sudo apt update -y
+          sudo apt install -y ansible jq
 
-      - name: Save private key
-        run: echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem && chmod 600 private_key.pem
+      - name: Create SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/hello-world
+          chmod 600 ~/.ssh/hello-world
 
       - name: Run Ansible Playbook
-        run: ansible-playbook -i ansible/inventory.ini ansible/install_docker.yml
+        working-directory: ansible
+        run: |
+          ansible-playbook -i "${PUBLIC_IP}," \
+            --private-key ~/.ssh/hello-world \
+            -u ubuntu install_docker.yml
