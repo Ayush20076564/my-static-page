@@ -50,7 +50,8 @@ jobs:
           cat tf_output.json
 
           # ✅ Fixed jq parsing issue
-          PUBLIC_IP=$(cat tf_output.json | jq -r '.public_ip.value // empty' 2>/dev/null || echo "")
+          PUBLIC_IP=$(grep -m 1 -A 10 '{' tf_output.json | jq -r '.public_ip.value // empty' 2>/dev/null || echo "")
+
           
           if [ -z "$PUBLIC_IP" ]; then
             echo "❌ No public_ip found in Terraform output."
