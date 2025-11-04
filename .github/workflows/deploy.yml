@@ -49,9 +49,13 @@ jobs:
           echo "✅ Terraform outputs (raw):"
           cat tf_output.json
 
-          PUBLIC_IP=$(jq -r '.public_ip.value // empty' tf_output.json)
+          # ✅ Fixed jq parsing issue
+          PUBLIC_IP=$(cat tf_output.json | jq -r '.public_ip.value // empty' 2>/dev/null || echo "")
+          
           if [ -z "$PUBLIC_IP" ]; then
             echo "❌ No public_ip found in Terraform output."
+            echo "🔍 Terraform outputs were:"
+            cat tf_output.json
             exit 1
           fi
 
@@ -71,7 +75,7 @@ jobs:
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/hello-world
           chmod 600 ~/.ssh/hello-world
 
-      # 🧩 Step 8 — Run Ansible Playbook
+      # 🧩 Step 8 — Run Ansible Playbook to deploy Docker + site
       - name: Run Ansible Playbook
         working-directory: ansible
         run: |
