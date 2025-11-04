@@ -15,7 +15,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "eu-north-1"   # ✅ change if your EC2/keypair is in a different region
+  region = "eu-north-1" # ✅ change if your keypair is in another region
 }
 
 ###########################################
@@ -48,11 +48,11 @@ data "aws_ami" "ubuntu" {
     values = ["hvm"]
   }
 
-  owners = ["099720109477"] # Canonical (official Ubuntu images)
+  owners = ["099720109477"] # Canonical
 }
 
 ###########################################
-# Security Group (unique name)
+# Security Group (unique name each run)
 ###########################################
 resource "aws_security_group" "web_sg" {
   name        = "web_sg-${random_id.suffix.hex}"
@@ -87,11 +87,11 @@ resource "aws_security_group" "web_sg" {
 }
 
 ###########################################
-# EC2 Instance
+# EC2 Instance (Free-Tier)
 ###########################################
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.micro"               # ✅ Free tier eligible
+  instance_type          = "t2.micro"                 # ✅ free-tier eligible
   key_name               = data.aws_key_pair.web_key.key_name
   vpc_security_group_ids = [aws_security_group.web_sg.id]
 
@@ -114,6 +114,6 @@ output "security_group_name" {
 }
 
 output "ami_used" {
-  description = "Ubuntu AMI ID used"
+  description = "Ubuntu AMI ID used for EC2"
   value       = data.aws_ami.ubuntu.id
 }
