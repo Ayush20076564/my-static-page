@@ -93,4 +93,27 @@ resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t4g.micro"     # ✅ ARM-based, free-tier eligible
   key_name               = data.aws_key_pair.web_key.key_name
-  vpc_secu_
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "MyStaticPage"
+  }
+}
+
+###########################################
+# Outputs (for GitHub Actions)
+###########################################
+output "public_ip" {
+  description = "Public IP of the EC2 instance"
+  value       = aws_instance.web.public_ip
+}
+
+output "security_group_name" {
+  description = "Security group name"
+  value       = aws_security_group.web_sg.name
+}
+
+output "ami_used" {
+  description = "AMI ID used for EC2"
+  value       = data.aws_ami.ubuntu.id
+}
