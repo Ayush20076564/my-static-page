@@ -122,4 +122,4 @@ jobs:
       # Step 11: Display deployed site URL
       # -----------------------------------------
       - name: Display deployed site URL
-        run: echo "🌐 Your static site is live at: http://${{ env.PUBLIC_IP }}"
+      run: echo "🌐 Your static site is live at: http://${{ env.PUBLIC_IP }}"
