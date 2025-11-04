@@ -1,0 +1,41 @@
+---
+- name: Setup EC2 and run Docker container
+  hosts: web
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Stop existing container
+      shell: docker stop my-static-page || true
+
+    - name: Remove old container
+      shell: docker rm my-static-page || true
+
+    - name: Remove old image
+      shell: docker rmi my-static-page || true
+
+    - name: Copy website files
+      synchronize:
+        src: ../src/
+        dest: /home/ubuntu/src/
+        recursive: yes
+
+    - name: Copy Dockerfile
+      copy:
+        src: ../docker/Dockerfile
+        dest: /home/ubuntu/Dockerfile
+
+    - name: Build Docker image
+      shell: docker build -t my-static-page /home/ubuntu/
+
+    - name: Run Docker container
+      shell: docker run -d -p 80:80 --name my-static-page my-static-page
+
