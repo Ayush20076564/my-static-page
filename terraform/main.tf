@@ -15,7 +15,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "eu-north-1"   # ✅ use same region as your keypair
+  region = "eu-north-1"   # ✅ change if your EC2/keypair is in a different region
 }
 
 ###########################################
@@ -33,7 +33,26 @@ data "aws_key_pair" "web_key" {
 }
 
 ###########################################
-# Security Group (with unique name)
+# Automatically Fetch Latest Ubuntu 22.04 AMI
+###########################################
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical (official Ubuntu images)
+}
+
+###########################################
+# Security Group (unique name)
 ###########################################
 resource "aws_security_group" "web_sg" {
   name        = "web_sg-${random_id.suffix.hex}"
@@ -71,8 +90,8 @@ resource "aws_security_group" "web_sg" {
 # EC2 Instance
 ###########################################
 resource "aws_instance" "web" {
-  ami                    = "ami-0c02fb55956c7d316" # Ubuntu 22.04 (eu-north-1)
-  instance_type          = "t3.micro"
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.micro"               # ✅ Free tier eligible
   key_name               = data.aws_key_pair.web_key.key_name
   vpc_security_group_ids = [aws_security_group.web_sg.id]
 
@@ -82,9 +101,19 @@ resource "aws_instance" "web" {
 }
 
 ###########################################
-# Output EC2 Public IP for Ansible
+# Outputs
 ###########################################
 output "public_ip" {
   description = "Public IP of the EC2 instance"
   value       = aws_instance.web.public_ip
+}
+
+output "security_group_name" {
+  description = "Unique name of the security group"
+  value       = aws_security_group.web_sg.name
+}
+
+output "ami_used" {
+  description = "Ubuntu AMI ID used"
+  value       = data.aws_ami.ubuntu.id
 }
