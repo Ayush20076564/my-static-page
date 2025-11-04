@@ -9,19 +9,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: eu-north-1
+      AWS_REGION: us-east-1
       ANSIBLE_HOST_KEY_CHECKING: "False"
 
     steps:
-      # -----------------------------------------
-      # Step 1: Checkout source code
-      # -----------------------------------------
+      # 🧩 Step 1 — Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # -----------------------------------------
-      # Step 2: Configure AWS credentials
-      # -----------------------------------------
+      # 🧩 Step 2 — Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -29,42 +25,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # -----------------------------------------
-      # Step 3: Set up Terraform
-      # -----------------------------------------
+      # 🧩 Step 3 — Setup Terraform
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.9.5
 
-      # -----------------------------------------
-      # Step 4: Initialize and apply Terraform
-      # -----------------------------------------
+      # 🧩 Step 4 — Terraform Init
       - name: Terraform Init
         working-directory: terraform
         run: terraform init -input=false
 
+      # 🧩 Step 5 — Terraform Apply
       - name: Terraform Apply
         working-directory: terraform
         run: terraform apply -auto-approve -input=false
 
-      # -----------------------------------------
-      # Step 5: Install jq (for JSON parsing)
-      # -----------------------------------------
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      # -----------------------------------------
-      # Step 6: Capture Terraform output safely
-      # -----------------------------------------
-      - name: Capture Terraform output safely
+      # 🧩 Step 6 — Capture Terraform Output
+      - name: Capture Terraform output
         id: tf-output
         working-directory: terraform
         run: |
           echo "Fetching Terraform outputs..."
           terraform output -json > tf_output.json 2> tf_output_error.log || true
 
-          # Validate JSON
           if ! jq empty tf_output.json 2>/dev/null; then
             echo "⚠️ Terraform output is not valid JSON. Creating fallback."
             echo "{}" > tf_output.json
@@ -73,61 +57,39 @@ jobs:
           echo "✅ Terraform outputs (raw):"
           cat tf_output.json || echo "{}"
 
-      # -----------------------------------------
-      # Step 7: Extract EC2 Public IP robustly
-      # -----------------------------------------
+      # 🧩 Step 7 — Extract Public IP for Ansible
       - name: Extract EC2 Public IP
         id: extract-ip
         working-directory: terraform
         run: |
-          if [ ! -f tf_output.json ]; then
-            echo "❌ tf_output.json missing."
-            exit 1
-          fi
-
-          PUBLIC_IP=$(jq -r '.public_ip.value // empty' tf_output.json 2>/dev/null || echo "")
-
-          if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "null" ]; then
+          PUBLIC_IP=$(jq -r '.public_ip.value // empty' tf_output.json)
+          if [ -z "$PUBLIC_IP" ]; then
             echo "❌ Could not extract public_ip from Terraform output."
             echo "🔍 Terraform outputs were:"
             cat tf_output.json
             exit 1
           fi
-
           echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
           echo "✅ Deployed EC2 IP: $PUBLIC_IP"
 
-      # -----------------------------------------
-      # Step 8: Install Ansible
-      # -----------------------------------------
+      # 🧩 Step 8 — Install Ansible & jq
       - name: Install Ansible
         run: |
-          sudo apt update -y
-          sudo apt install -y ansible jq
+          sudo apt-get update -y
+          sudo apt-get install -y ansible jq
 
-      # -----------------------------------------
-      # Step 9: Create SSH private key
-      # -----------------------------------------
+      # 🧩 Step 9 — Create SSH key for Ansible connection
       - name: Create SSH private key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/hello-world
           chmod 600 ~/.ssh/hello-world
 
-      # -----------------------------------------
-      # Step 10: Run Ansible Playbook
-      # -----------------------------------------
+      # 🧩 Step 10 — Run Ansible Playbook
       - name: Run Ansible Playbook
         working-directory: ansible
         run: |
-          echo "🚀 Deploying app to EC2 ${PUBLIC_IP}..."
+          echo "🌍 Connecting to $PUBLIC_IP ..."
           ansible-playbook -i "${PUBLIC_IP}," \
             --private-key ~/.ssh/hello-world \
             -u ubuntu install_docker.yml
-
-      # -----------------------------------------
-      # Step 11: Display deployed site URL
-      # -----------------------------------------
-      - name: Display deployed site URL
-        run: |
-          echo "🌐 Your static site is live at: http://${{ env.PUBLIC_IP }}"
