@@ -29,7 +29,7 @@ resource "random_id" "suffix" {
 # Use Existing SSH Key Pair
 ###########################################
 data "aws_key_pair" "web_key" {
-  key_name = "hello-world"   # ✅ Replace with your AWS key pair name
+  key_name = "my-static-page"   # ✅ Replace with your AWS key pair name
 }
 
 ###########################################
