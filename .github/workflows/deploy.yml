@@ -62,8 +62,15 @@ jobs:
         working-directory: terraform
         run: |
           echo "Fetching Terraform outputs..."
-          terraform output -json > tf_output.json || echo "{}" > tf_output.json
-          echo "✅ Terraform outputs captured:"
+          terraform output -json > tf_output.json 2> tf_output_error.log || true
+
+          # Validate JSON
+          if ! jq empty tf_output.json 2>/dev/null; then
+            echo "⚠️ Terraform output is not valid JSON. Creating fallback."
+            echo "{}" > tf_output.json
+          fi
+
+          echo "✅ Terraform outputs (raw):"
           cat tf_output.json || echo "{}"
 
       # -----------------------------------------
@@ -73,15 +80,15 @@ jobs:
         id: extract-ip
         working-directory: terraform
         run: |
-          if [ ! -s tf_output.json ]; then
-            echo "❌ tf_output.json is empty or missing."
+          if [ ! -f tf_output.json ]; then
+            echo "❌ tf_output.json missing."
             exit 1
           fi
 
-          PUBLIC_IP=$(jq -r '.public_ip.value // empty' tf_output.json)
+          PUBLIC_IP=$(jq -r '.public_ip.value // empty' tf_output.json 2>/dev/null || echo "")
 
           if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "null" ]; then
-            echo "❌ No public_ip found in Terraform output."
+            echo "❌ Could not extract public_ip from Terraform output."
             echo "🔍 Terraform outputs were:"
             cat tf_output.json
             exit 1
@@ -113,7 +120,7 @@ jobs:
       - name: Run Ansible Playbook
         working-directory: ansible
         run: |
-          echo "Deploying app to EC2 ${PUBLIC_IP}..."
+          echo "🚀 Deploying app to EC2 ${PUBLIC_IP}..."
           ansible-playbook -i "${PUBLIC_IP}," \
             --private-key ~/.ssh/hello-world \
             -u ubuntu install_docker.yml
