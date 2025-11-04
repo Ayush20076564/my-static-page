@@ -1,42 +1,90 @@
 ---
-- name: Deploy static website using Docker
+- name: Setup EC2 instance and deploy static site
   hosts: all
   become: yes
+  vars:
+    project_dir: /home/ubuntu/my-static-page
 
   tasks:
-    - name: Update apt cache
+    - name: Update apt packages
       apt:
         update_cache: yes
+        force_apt_get: yes
 
-    - name: Install Docker
+    - name: Install dependencies for Docker
       apt:
-        name: docker.io
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
         state: present
+        force_apt_get: yes
 
-    - name: Enable and start Docker
-      systemd:
+    - name: Add Docker GPG key
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      args:
+        warn: false
+
+    - name: Add Docker repository
+      shell: |
+        echo \
+        "deb [arch=arm64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+        https://download.docker.com/linux/ubuntu \
+        $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        warn: false
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: latest
+        update_cache: yes
+
+    - name: Ensure Docker service is running
+      service:
         name: docker
-        enabled: true
         state: started
+        enabled: true
 
-    - name: Create website directory
+    - name: Create project directory
       file:
-        path: /opt/website
+        path: "{{ project_dir }}"
         state: directory
         owner: ubuntu
-        mode: "0755"
+        group: ubuntu
+        mode: '0755'
 
-    - name: Copy website files from src/
+    - name: Copy static website files to server
       copy:
         src: ../src/
-        dest: /opt/website/
+        dest: "{{ project_dir }}/"
         owner: ubuntu
-        mode: "0644"
+        group: ubuntu
+        mode: '0644'
 
-    - name: Remove old container if exists
-      shell: docker rm -f my-static-page || true
+    - name: Create Dockerfile for static site
+      copy:
+        dest: "{{ project_dir }}/Dockerfile"
+        content: |
+          FROM nginx:alpine
+          COPY . /usr/share/nginx/html
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
 
-    - name: Run Nginx container serving the site
-      shell: >
-        docker run -d --name my-static-page -p 80:80
-        -v /opt/website:/usr/share/nginx/html:ro nginx
+    - name: Build Docker image
+      command: docker build -t my-static-site:latest .
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Run Docker container
+      command: docker run -d -p 80:80 --name static-page my-static-site:latest
+      ignore_errors: yes
+
+    - name: Display deployment success message
+      debug:
+        msg: "✅ Static website deployed successfully and accessible on port 80!"

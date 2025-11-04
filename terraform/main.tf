@@ -1,5 +1,5 @@
 ###########################################
-# Terraform & Provider Configuration
+# Terraform & AWS Provider Configuration
 ###########################################
 terraform {
   required_providers {
@@ -15,32 +15,51 @@ terraform {
 }
 
 provider "aws" {
-  region = "eu-north-1"   # ✅ use same region as your keypair
+  region = "us-east-1"   # ✅ Reliable & free-tier eligible region
 }
 
 ###########################################
-# Generate Unique Suffix for Resource Names
+# Generate Unique Suffix (Avoid Duplicate SG Names)
 ###########################################
 resource "random_id" "suffix" {
   byte_length = 3
 }
 
 ###########################################
-# Use Existing SSH Key
+# Use Existing SSH Key Pair
 ###########################################
 data "aws_key_pair" "web_key" {
-  key_name = "hello-world"
+  key_name = "hello-world"   # ✅ Replace with your AWS key pair name
 }
 
 ###########################################
-# Security Group (with unique name)
+# Latest Ubuntu 22.04 ARM64 AMI (for t4g.micro)
+###########################################
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-arm64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"]  # Canonical (official Ubuntu AMIs)
+}
+
+###########################################
+# Security Group (Allow SSH & HTTP)
 ###########################################
 resource "aws_security_group" "web_sg" {
-  name        = "web_sg-${random_id.suffix.hex}"
-  description = "Allow SSH (22) and HTTP (80)"
+  name        = "web-sg-${random_id.suffix.hex}"
+  description = "Allow SSH (22) and HTTP (80) access"
 
   ingress {
-    description = "SSH"
+    description = "SSH access"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -48,7 +67,7 @@ resource "aws_security_group" "web_sg" {
   }
 
   ingress {
-    description = "HTTP"
+    description = "HTTP access"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -63,28 +82,15 @@ resource "aws_security_group" "web_sg" {
   }
 
   tags = {
-    Name = "web_sg-${random_id.suffix.hex}"
+    Name = "web-sg-${random_id.suffix.hex}"
   }
 }
 
 ###########################################
-# EC2 Instance
+# EC2 Instance (Free-Tier ARM Instance)
 ###########################################
 resource "aws_instance" "web" {
-  ami                    = "ami-0c02fb55956c7d316" # Ubuntu 22.04 (eu-north-1)
-  instance_type          = "t3.micro"
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t4g.micro"     # ✅ ARM-based, free-tier eligible
   key_name               = data.aws_key_pair.web_key.key_name
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-
-  tags = {
-    Name = "MyStaticPage"
-  }
-}
-
-###########################################
-# Output EC2 Public IP for Ansible
-###########################################
-output "public_ip" {
-  description = "Public IP of the EC2 instance"
-  value       = aws_instance.web.public_ip
-}
+  vpc_secu_
