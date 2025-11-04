@@ -91,7 +91,7 @@ resource "aws_security_group" "web_sg" {
 ###########################################
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.micro"                 # ✅ free-tier eligible in eu-north-1
+  instance_type          = "t4g.micro"            # ✅ free-tier eligible in eu-north-1
   key_name               = data.aws_key_pair.web_key.key_name
   vpc_security_group_ids = [aws_security_group.web_sg.id]
 
