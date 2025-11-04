@@ -15,7 +15,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "eu-north-1" # ✅ change if your keypair is in another region
+  region = "eu-north-1"  # ✅ Adjust only if your AWS keypair is in a different region
 }
 
 ###########################################
@@ -26,10 +26,10 @@ resource "random_id" "suffix" {
 }
 
 ###########################################
-# Use Existing SSH Key
+# Use Existing SSH Key (replace name if needed)
 ###########################################
 data "aws_key_pair" "web_key" {
-  key_name = "hello-world"
+  key_name = "hello-world"  # ✅ Ensure this key exists in AWS EC2 → Key Pairs
 }
 
 ###########################################
@@ -48,11 +48,11 @@ data "aws_ami" "ubuntu" {
     values = ["hvm"]
   }
 
-  owners = ["099720109477"] # Canonical
+  owners = ["099720109477"]  # Canonical (official Ubuntu images)
 }
 
 ###########################################
-# Security Group (unique name each run)
+# Security Group (with unique name)
 ###########################################
 resource "aws_security_group" "web_sg" {
   name        = "web_sg-${random_id.suffix.hex}"
@@ -87,11 +87,11 @@ resource "aws_security_group" "web_sg" {
 }
 
 ###########################################
-# EC2 Instance (Free-Tier)
+# EC2 Instance (Free-Tier Eligible)
 ###########################################
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t2.micro"                 # ✅ free-tier eligible
+  instance_type          = "t3.micro"                 # ✅ free-tier eligible in eu-north-1
   key_name               = data.aws_key_pair.web_key.key_name
   vpc_security_group_ids = [aws_security_group.web_sg.id]
 
@@ -101,7 +101,7 @@ resource "aws_instance" "web" {
 }
 
 ###########################################
-# Outputs
+# Outputs for CI/CD (GitHub Actions)
 ###########################################
 output "public_ip" {
   description = "Public IP of the EC2 instance"
