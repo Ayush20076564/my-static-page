@@ -7,93 +7,29 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
   }
 }
 
 provider "aws" {
-  region = "eu-north-1"  # ✅ Adjust only if your AWS keypair is in a different region
+  region = "eu-north-1"   # or your preferred region
 }
 
 ###########################################
-# Generate Unique Suffix for Resource Names
+# Use Existing SSH Key
 ###########################################
-resource "random_id" "suffix" {
-  byte_length = 3
+data "aws_lightsail_key_pair" "existing" {
+  name = "hello-world"    # same name as your existing AWS key pair
 }
 
 ###########################################
-# Use Existing SSH Key (replace name if needed)
+# Lightsail Instance (no vCPU limits)
 ###########################################
-data "aws_key_pair" "web_key" {
-  key_name = "hello-world"  # ✅ Ensure this key exists in AWS EC2 → Key Pairs
-}
-
-###########################################
-# Automatically Fetch Latest Ubuntu 22.04 AMI
-###########################################
-data "aws_ami" "ubuntu" {
-  most_recent = true
-
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  owners = ["099720109477"]  # Canonical (official Ubuntu images)
-}
-
-###########################################
-# Security Group (with unique name)
-###########################################
-resource "aws_security_group" "web_sg" {
-  name        = "web_sg-${random_id.suffix.hex}"
-  description = "Allow SSH (22) and HTTP (80)"
-
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "web_sg-${random_id.suffix.hex}"
-  }
-}
-
-###########################################
-# EC2 Instance (Free-Tier Eligible)
-###########################################
-resource "aws_instance" "web" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t4g.micro"            # ✅ free-tier eligible in eu-north-1
-  key_name               = data.aws_key_pair.web_key.key_name
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
+resource "aws_lightsail_instance" "web" {
+  name              = "my-static-page"
+  availability_zone = "eu-north-1a"
+  blueprint_id      = "ubuntu_22_04"   # Ubuntu 22.04 LTS
+  bundle_id         = "nano_2_0"       # smallest plan (no quotas)
+  key_pair_name     = data.aws_lightsail_key_pair.existing.name
 
   tags = {
     Name = "MyStaticPage"
@@ -101,19 +37,28 @@ resource "aws_instance" "web" {
 }
 
 ###########################################
-# Outputs for CI/CD (GitHub Actions)
+# Networking: open ports 22 + 80
+###########################################
+resource "aws_lightsail_instance_public_ports" "web_ports" {
+  instance_name = aws_lightsail_instance.web.name
+
+  port_info {
+    from_port = 22
+    to_port   = 22
+    protocol  = "tcp"
+  }
+
+  port_info {
+    from_port = 80
+    to_port   = 80
+    protocol  = "tcp"
+  }
+}
+
+###########################################
+# Outputs for CI/CD
 ###########################################
 output "public_ip" {
-  description = "Public IP of the EC2 instance"
-  value       = aws_instance.web.public_ip
-}
-
-output "security_group_name" {
-  description = "Unique name of the security group"
-  value       = aws_security_group.web_sg.name
-}
-
-output "ami_used" {
-  description = "Ubuntu AMI ID used for EC2"
-  value       = data.aws_ami.ubuntu.id
+  description = "Public IP of the Lightsail instance"
+  value       = aws_lightsail_instance.web.public_ip_address
 }
